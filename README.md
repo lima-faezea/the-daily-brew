@@ -3,10 +3,31 @@
 A phone-friendly recipe app for the Nespresso Vertuo (built around the Vertuo Pop+).
 Pick the pod you have and see drinks that suit it, or pick a drink and see which pods
 make it best. Each recipe scales to the pod's brew size and updates when you change
-hot/iced, sweetness or milk. Favorites are saved on your phone.
+hot/iced, sweetness or milk. Favorites and your pod collection are saved on your phone.
 
 - No AI, no API keys, no accounts, no outside services.
 - Installable on iPhone (Add to Home Screen) and works offline after the first visit.
+
+## What's new in version 2
+
+- **My Pods:** tap ＋ next to a pod (or "Add to My Pods" on its page) to mark the pods you own.
+  Tap ✓ to remove one. Your collection is saved on the device.
+- **Your pods come first** (the recommendation rules themselves don't change):
+  - On a drink's page, your pods are listed first in each group and marked "In My Pods".
+  - A recipe opens with your best pod for it (Recommended, else Works well). If none of
+    yours suits it, it uses the best pod overall.
+  - The recipe's pod picker has a "My Pods" group at the top.
+  - If you pick a pod you don't own and one of yours is Recommended, a hint offers to switch.
+  - Drinks has a "Fits my pods" filter, and each drink card shows your best pod for it.
+  - Home shows your pods as shortcuts.
+- **Search on Pods and Drinks**, updating as you type. Fixed rules:
+  - Capitals and accents are ignored ("caffe" finds Caffè Mocha).
+  - Every word you type must match the start of a word ("cinn" finds cinnamon,
+    but "ice" doesn't find "spice"; "iced vanilla" needs both).
+  - Pods match on name, tasting notes, size and labels (e.g. "mug", "double", "seasonal").
+    Pods that only *pair* with your word are listed separately under "Pairs well with…".
+  - Drinks match on name, description, flavors, ingredients, "iced" and "seasonal",
+    and work together with the filter buttons.
 
 ## Files
 
@@ -84,15 +105,19 @@ All paths in the app are relative, so it works in that sub-folder without change
 3. Scroll down and tap **Add to Home Screen**, then **Add**.
 4. Open The Daily Brew from your home screen once while online. After that it works offline.
 
-Favorites live on the phone in that app's storage. They don't sync to other devices,
-and deleting the app from your home screen erases them.
+Favorites and My Pods live on the phone in that app's storage. They don't sync to other
+devices, and deleting the app from your home screen erases them. The Home Screen app and
+Safari keep separate storage, so pods added in one won't appear in the other.
 
 ## Updating the app later
 
 The app saves its files for offline use, so phones keep the old version until you
 tell them there's a new one. **Whenever you change any file, open `sw.js` and change
-`VERSION`** (e.g. `daily-brew-v1` → `daily-brew-v2`). On the iPhone, close and reopen
-the app (sometimes twice) to pick up the update.
+`VERSION`**. It's currently `daily-brew-v2`; use `daily-brew-v3` next time.
+
+On the iPhone, the first launch after you republish still shows the old version while
+the new one downloads in the background. Fully close the app (swipe it away) and open it
+again to get the new version. Your favorites and pods are kept.
 
 ## Where the pod data comes from
 
