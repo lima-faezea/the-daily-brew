@@ -5,6 +5,8 @@
   var FAV_KEY = "dailybrew.favorites.v1";
   var PREF_KEY = "dailybrew.prefs.v1";
   var COLL_KEY = "dailybrew.collection.v1";
+  var CUSTOM_KEY = "dailybrew.custompods.v1";
+  var BUILTIN_PODS = window.PODS.slice();
   var ALL_PODS = window.PODS.concat(window.GENERIC_PODS);
   var view = document.getElementById("view");
   var topbar = document.getElementById("topbar");
@@ -124,6 +126,81 @@
     toast(i >= 0 ? "Removed " + p.name + " from My Pods" : "Added " + p.name + " to My Pods");
   }
 
+  /* ───────────── custom pods ───────────── */
+  // Each flavor choice maps to the same flavor tags the built-in pods use.
+  // "Mild" = milk-friendly (like Arondio); "Bold" = classic + chocolate (like Fortado, Scuro);
+  // "Fruity" is shown but no recipe uses it, so it adds no points.
+  var FLAVOR_OPTIONS = [
+    { key: "vanilla", label: "Vanilla", tags: ["vanilla"], color: "#E3C98A" },
+    { key: "caramel", label: "Caramel", tags: ["caramel"], color: "#D69A3C" },
+    { key: "chocolate", label: "Chocolate", tags: ["chocolate"], color: "#5B3524" },
+    { key: "maple", label: "Maple", tags: ["maple"], color: "#A0612E" },
+    { key: "nutty", label: "Nutty", tags: ["nutty"], color: "#8A5A35" },
+    { key: "spice", label: "Spice", tags: ["spice"], color: "#9C5A2C" },
+    { key: "fruity", label: "Fruity", tags: [], color: "#B5546A" },
+    { key: "mild", label: "Mild", tags: ["milky"], color: "#CDB48C" },
+    { key: "bold", label: "Bold", tags: ["classic", "chocolate"], color: "#3E2A22" },
+    { key: "pumpkin", label: "Pumpkin", tags: ["pumpkin"], color: "#D2732E" },
+    { key: "cinnamon", label: "Cinnamon", tags: ["cinnamon"], color: "#B5542F" },
+    { key: "brown-sugar", label: "Brown sugar", tags: ["brown-sugar"], color: "#9B5A2E" },
+    { key: "peppermint", label: "Peppermint", tags: ["peppermint"], color: "#C8414B" },
+    { key: "white-chocolate", label: "White chocolate", tags: ["white-chocolate"], color: "#E6D6BD" },
+    { key: "gingerbread", label: "Gingerbread", tags: ["gingerbread"], color: "#8E5128" }
+  ];
+  function flavorOpt(k) { return FLAVOR_OPTIONS.find(function (f) { return f.key === k; }); }
+  function loadCustom() {
+    var list = load(CUSTOM_KEY, []);
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (c) { return c && c.id && c.name && window.SIZES[c.size]; });
+  }
+  // Turn a saved custom pod into a pod object the recommendation rules understand.
+  function toPod(c) {
+    var flavors = (c.flavors || []).filter(flavorOpt);
+    var tags = [];
+    flavors.forEach(function (k) { flavorOpt(k).tags.forEach(function (t) { if (tags.indexOf(t) === -1) tags.push(t); }); });
+    var labels = flavors.map(function (k) { return flavorOpt(k).label.toLowerCase(); });
+    var notes = labels.length ? (labels.length === 1 ? labels[0] : labels.slice(0, -1).join(", ") + " & " + labels[labels.length - 1]) : "No flavor notes";
+    notes = notes.charAt(0).toUpperCase() + notes.slice(1);
+    return { id: c.id, name: c.name, size: c.size, notes: notes + " · custom pod", color: flavors.length ? flavorOpt(flavors[0]).color : "#9A8574",
+             pairs: tags, flavors: flavors, flavored: !!c.flavored, iceReady: !!c.iceReady, custom: true };
+  }
+  function refreshPods() {
+    window.PODS = BUILTIN_PODS.concat(loadCustom().map(toPod));
+    ALL_PODS = window.PODS.concat(window.GENERIC_PODS);
+  }
+  // Duplicate rule: ignore capitals, accents and extra spaces.
+  function nameKey(s) { return fold(s).replace(/\s+/g, " ").trim(); }
+  function nameTaken(name, exceptId) {
+    var k = nameKey(name);
+    return window.PODS.some(function (p) { return p.id !== exceptId && nameKey(p.name) === k; });
+  }
+  function saveCustom(draft, id) {
+    var list = loadCustom();
+    var rec = { id: id || "custom-" + Date.now().toString(36), name: draft.name.trim().replace(/\s+/g, " "), size: draft.size,
+                flavors: draft.flavors.slice(), flavored: !!draft.flavored, iceReady: !!draft.iceReady };
+    var i = list.findIndex(function (c) { return c.id === rec.id; });
+    if (i >= 0) { rec.created = list[i].created; list[i] = rec; } else { rec.created = Date.now(); list.push(rec); }
+    if (!store(CUSTOM_KEY, list)) return null;
+    refreshPods();
+    return rec.id;
+  }
+  function deleteCustom(id) {
+    var pod = podById(id);
+    if (!pod || !pod.custom) return;
+    store(CUSTOM_KEY, loadCustom().filter(function (c) { return c.id !== id; }));
+    store(COLL_KEY, myPods().filter(function (x) { return x !== id; }));
+    // Favorites that used this pod switch to the generic pod of the same size.
+    var seen = {};
+    var fl = favs().map(function (f) {
+      if (f.pod !== id) return f;
+      var g = Object.assign({}, f, { pod: "any-" + pod.size });
+      g.key = [g.recipe, g.pod, g.temp, g.sweet, g.milk].join("|");
+      return g;
+    }).filter(function (f) { if (seen[f.key]) return false; seen[f.key] = true; return true; });
+    store(FAV_KEY, fl);
+    refreshPods();
+  }
+
   /* ───────────── search (fixed rules) ───────────── */
   // Rules: ignore capitals and accents; every typed word must match the START of a word
   // (so "cinn" finds cinnamon, but "ice" doesn't find "spice").
@@ -138,7 +215,7 @@
     var s = window.SIZES[p.size];
     return [p.name, p.notes, s.label, s.floz + " oz", s.ml + " ml",
             p.seasonal ? "seasonal limited" : "", p.iceReady ? "iced ice" : "", p.flavored ? "flavored" : "",
-            p.size === "coffee" ? "mug" : "", p.size === "xl" ? "alto" : "",
+            p.size === "coffee" ? "mug" : "", p.size === "xl" ? "alto" : "", p.custom ? "custom my own" : "",
             withPairs ? p.pairs.map(function (t) { return t + " " + window.TAG_LABELS[t]; }).join(" ") : ""].join(" ");
   }
   function drinkText(r) {
@@ -352,7 +429,7 @@
     return list.filter(Boolean).map(function (b) { return '<span class="badge badge-' + b[0] + '">' + esc(b[1]) + '</span>'; }).join("");
   }
   function podBadges(p) {
-    return badges([p.seasonal && ["season", "Seasonal"], p.iceReady && ["ice", "Made for ice"], /made for milk/.test(p.notes) && ["milk", "Made for milk"], p.flavored && ["flavor", "Flavored"]]);
+    return badges([p.custom && ["custom", "Custom"], p.seasonal && ["season", "Seasonal"], p.iceReady && ["ice", "Made for ice"], /made for milk/.test(p.notes) && ["milk", "Made for milk"], p.flavored && ["flavor", "Flavored"]]);
   }
   function drinkBadges(r) {
     return badges([r.icedOnly && ["ice", "Iced only"], r.seasonal && ["season", "Seasonal"]]);
@@ -384,6 +461,7 @@
   }
   function noResults(what, term) {
     return '<div class="empty no-results"><p>No ' + what + ' match “' + esc(term) + '”.</p>' +
+      (what === "pods" ? '<a class="btn-add small" href="#/pods/new?name=' + encodeURIComponent(term.trim()) + '">' + ICONS.plus + ' Add “' + esc(term.trim()) + '” as a custom pod</a>' : "") +
       '<button type="button" class="link-btn" data-act="clear-search">Clear search</button></div>';
   }
   function section(title, cls, body, sub) {
@@ -466,9 +544,12 @@
   function viewPods(q) {
     var term = q.get("q") || "";
     return '<div class="page-head"><h1 class="title">Choose your pod</h1><p class="lede">Tap a pod to see drinks that suit it. Tap ＋ to add it to My Pods.</p>' +
-      searchBox("pods", term, "Search pods, flavors or sizes") + '</div>' +
+      searchBox("pods", term, "Search pods, flavors or sizes") +
+      '<a class="btn-add" href="#/pods/new">' + ICONS.plus + ' Add a Pod</a></div>' +
       '<div id="results" aria-live="polite">' + podsResults(term) + '</div>' +
-      section("Pod not listed?", "", sizeChips(function (id) { return "#/pod/" + id; }), "Choose its size instead. It’s printed on the sleeve.");
+      section("Pod not listed?", "", '<a class="btn-add ghost" href="#/pods/new">' + ICONS.plus + ' Add it as a custom pod</a>' +
+        '<p class="sec-sub or">Or just pick its size. It’s printed on the sleeve.</p>' + sizeChips(function (id) { return "#/pod/" + id; }),
+        "New seasonal or limited-edition pod? Save it once and it works like any other pod.");
   }
 
   function viewPod(id) {
@@ -485,6 +566,8 @@
     return '<div class="pod-hero card">' + podDot(p, 64) + '<div><h1 class="title">' + esc(p.name) + '</h1>' +
         '<p class="meta">' + esc(sizeLine(p.size)) + '</p><p class="notes">' + esc(p.notes) + '</p>' + intensity +
         '<div class="row-badges">' + podBadges(p) + '</div></div></div>' + ownBtn +
+      (p.custom ? '<div class="custom-actions"><a class="btn-secondary" href="#/pods/edit/' + p.id + '">Edit pod</a>' +
+        '<button type="button" class="btn-secondary danger" data-act="delete-pod" data-pod="' + p.id + '">Delete pod</button></div>' : "") +
       (g.rec.length ? section("Recommended for this pod", "sec-rec", list(g.rec, "rec", true), "Chosen for its size and flavor notes.") : "") +
       (g.good.length ? section("Also works well", "", list(g.good, "", true)) : "") +
       (g.other.length ? section("Other drinks", "sec-other", list(g.other, "other", true), "You can still make any of these with this pod. Here’s what to expect.") : "");
@@ -563,7 +646,7 @@
     var mineIds = myPods();
     function opt(p) {
       var g = classify(r, p).group;
-      return '<option value="' + p.id + '"' + (p.id === s.pod.id ? " selected" : "") + '>' + esc(p.name) + (g === "rec" ? "  ★" : "") + '</option>';
+      return '<option value="' + p.id + '"' + (p.id === s.pod.id ? " selected" : "") + '>' + esc(p.name) + (p.custom ? " (custom)" : "") + (g === "rec" ? "  ★" : "") + '</option>';
     }
     var mineGroup = mineIds.length ? '<optgroup label="My Pods">' + mineIds.map(podById).map(opt).join("") + '</optgroup>' : "";
     var podOptions = mineGroup + window.SIZE_ORDER.map(function (k) {
@@ -612,6 +695,123 @@
     }).join("") + '</div>';
   }
 
+  /* ───────────── add / edit pod form ───────────── */
+  var draft = null; // the form's current values while it's open
+
+  function previewHTML(d) {
+    if (!d.size) return '<p class="preview-empty">Pick a size to see which drinks this pod would be recommended for.</p>';
+    var pod = toPod({ id: "preview", name: d.name || "Your pod", size: d.size, flavors: d.flavors, flavored: d.flavored, iceReady: d.iceReady });
+    var g = groupBy(window.RECIPES, function (r) { return classify(r, pod); });
+    return '<p class="preview-line"><strong>Recommended for:</strong> ' + (g.rec.length ? esc(g.rec.map(function (x) { return x.item.name; }).join(", ")) : "none yet. Add flavor notes to get matches.") + '</p>' +
+      '<p class="preview-line"><strong>Also works well:</strong> ' + g.good.length + ' drink' + (g.good.length === 1 ? "" : "s") + '</p>' +
+      (pod.flavored && !pod.pairs.length ? '<p class="preview-warn">A flavored pod with no matching flavor notes won’t be recommended for any drink.</p>' : "");
+  }
+
+  function viewPodForm(id, q) {
+    var editing = id ? podById(id) : null;
+    if (id && (!editing || !editing.custom)) return notFound();
+    draft = editing
+      ? { id: editing.id, name: editing.name, size: editing.size, flavors: editing.flavors.slice(), flavored: editing.flavored, iceReady: editing.iceReady, addMine: false }
+      : { id: null, name: (q.get("name") || "").slice(0, 40), size: "", flavors: [], flavored: false, iceReady: false, addMine: true };
+    function sw(key, label, sub, on) {
+      return '<label class="switch-row"><span><span class="switch-label">' + label + '</span><span class="switch-sub">' + sub + '</span></span>' +
+        '<input type="checkbox" class="switch" data-field="' + key + '"' + (on ? " checked" : "") + '></label>';
+    }
+    return '<div class="page-head"><h1 class="title">' + (editing ? "Edit pod" : "Add a pod") + '</h1>' +
+        '<p class="lede">' + (editing ? "Changes update its recommendations right away." : "For new seasonal or limited-edition pods. It’s saved only on this device.") + '</p></div>' +
+      '<form id="pod-form" class="card pod-form" novalidate>' +
+        '<div class="field"><label class="ctl-label" for="pf-name">Pod name <span class="req">Required</span></label>' +
+          '<input id="pf-name" class="text-input" type="text" maxlength="40" value="' + esc(draft.name) + '" placeholder="e.g. Toffee Nut" autocomplete="off" autocapitalize="words" enterkeyhint="done">' +
+          '<p class="field-err" id="err-name" role="alert"></p></div>' +
+        '<div class="field"><span class="ctl-label" id="size-label">Size <span class="req">Required</span></span>' +
+          '<p class="field-hint">It’s printed on the sleeve (e.g. “Double Espresso 2.7 fl oz”).</p>' +
+          '<div class="size-grid" role="radiogroup" aria-labelledby="size-label">' + window.SIZE_ORDER.map(function (k) {
+            var s = window.SIZES[k], on = draft.size === k;
+            return '<button type="button" role="radio" aria-checked="' + on + '" class="size-opt' + (on ? " on" : "") + '" data-size="' + k + '">' +
+              '<span class="size-name">' + esc(s.label) + '</span><span class="size-vol">' + s.floz + ' fl oz · ' + s.ml + ' ml</span></button>';
+          }).join("") + '</div><p class="field-err" id="err-size" role="alert"></p></div>' +
+        '<div class="field"><span class="ctl-label">Flavor notes <span class="opt-tag">Pick any</span></span>' +
+          '<div class="chips wrap flavor-chips">' + FLAVOR_OPTIONS.map(function (f) {
+            var on = draft.flavors.indexOf(f.key) !== -1;
+            return '<button type="button" class="chip' + (on ? " on" : "") + '" aria-pressed="' + on + '" data-flavor="' + f.key + '"><i class="swatch" style="background:' + f.color + '"></i>' + esc(f.label) + '</button>';
+          }).join("") + '</div></div>' +
+        '<div class="field switches">' +
+          sw("flavored", "Flavored coffee", "Like Maple Pecan or Pumpkin Spice Cake", draft.flavored) +
+          sw("iceReady", "Made for ice", "Nespresso says to serve it over ice", draft.iceReady) +
+          (editing ? "" : sw("addMine", "Add to My Pods", "So it comes first in recommendations", draft.addMine)) +
+        '</div>' +
+        '<div class="preview" id="pf-preview" aria-live="polite">' + previewHTML(draft) + '</div>' +
+        '<div class="form-actions"><button type="submit" class="btn-primary">' + (editing ? "Save changes" : "Save pod") + '</button>' +
+          (editing ? '<button type="button" class="link-btn danger" data-act="delete-pod" data-pod="' + editing.id + '">Delete this pod</button>' : "") +
+        '</div>' +
+      '</form>';
+  }
+
+  function bindPodForm() {
+    var form = document.getElementById("pod-form");
+    if (!form) return;
+    var name = document.getElementById("pf-name");
+    var preview = document.getElementById("pf-preview");
+    function refresh() { preview.innerHTML = previewHTML(draft); }
+    function setErr(id, msg) { var el = document.getElementById(id); el.textContent = msg || ""; el.classList.toggle("show", !!msg); }
+    name.addEventListener("input", function () { draft.name = name.value; setErr("err-name", ""); name.removeAttribute("aria-invalid"); });
+    name.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); name.blur(); } });
+    form.addEventListener("click", function (e) {
+      var s = e.target.closest("[data-size]"), f = e.target.closest("[data-flavor]");
+      if (s) {
+        draft.size = s.dataset.size; setErr("err-size", "");
+        form.querySelectorAll("[data-size]").forEach(function (b) { var on = b === s; b.classList.toggle("on", on); b.setAttribute("aria-checked", on); });
+        refresh();
+      } else if (f) {
+        var k = f.dataset.flavor, i = draft.flavors.indexOf(k);
+        if (i >= 0) draft.flavors.splice(i, 1); else draft.flavors.push(k);
+        f.classList.toggle("on", i < 0); f.setAttribute("aria-pressed", i < 0);
+        refresh();
+      }
+    });
+    form.addEventListener("change", function (e) {
+      var fld = e.target.dataset && e.target.dataset.field;
+      if (fld) { draft[fld] = e.target.checked; refresh(); }
+    });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var nm = name.value.trim().replace(/\s+/g, " ");
+      var errName = !nm ? "Enter a name for the pod." : nameTaken(nm, draft.id) ? "There’s already a pod called “" + nm + "”. Use a different name." : "";
+      var errSize = draft.size ? "" : "Choose the pod’s size.";
+      setErr("err-name", errName); setErr("err-size", errSize);
+      if (errName) { name.setAttribute("aria-invalid", "true"); name.focus(); return; }
+      if (errSize) { document.querySelector(".size-grid").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+      draft.name = nm;
+      var id = saveCustom(draft, draft.id);
+      if (!id) { toast("Couldn’t save. Your browser is blocking storage."); return; }
+      if (draft.addMine && !owns(id)) store(COLL_KEY, myPods().concat(id));
+      toast(draft.id ? "Saved changes to " + nm : "Added " + nm + (draft.addMine ? " to My Pods" : ""));
+      // Editing: return to the pod's page you came from. Adding: replace the form with the new pod's page.
+      if (draft.id && navStack.length > 1 && navStack[navStack.length - 2] === "#/pod/" + id) { history.back(); return; }
+      navStack.pop();
+      location.replace("#/pod/" + id);
+    });
+  }
+
+  // Small in-app confirmation sheet (used for deleting a custom pod).
+  function confirmSheet(title, body, okLabel, onOk) {
+    var wrap = document.createElement("div");
+    wrap.className = "sheet-backdrop";
+    wrap.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">' +
+      '<h2 id="sheet-title" class="card-title">' + esc(title) + '</h2><p class="sheet-body">' + esc(body) + '</p>' +
+      '<button type="button" class="btn-primary danger" data-sheet="ok">' + esc(okLabel) + '</button>' +
+      '<button type="button" class="btn-secondary" data-sheet="cancel">Cancel</button></div>';
+    document.body.appendChild(wrap);
+    requestAnimationFrame(function () { wrap.classList.add("show"); });
+    var okBtn = wrap.querySelector('[data-sheet="cancel"]'); okBtn.focus();
+    function close() { wrap.classList.remove("show"); setTimeout(function () { wrap.remove(); }, 200); }
+    wrap.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-sheet]");
+      if (e.target === wrap || (b && b.dataset.sheet === "cancel")) close();
+      else if (b && b.dataset.sheet === "ok") { close(); onOk(); }
+    });
+  }
+
   function notFound() { return '<div class="empty-state card"><p><strong>That page isn’t here.</strong></p><a class="btn-primary" href="#/">Go home</a></div>'; }
 
   /* ───────────── router ───────────── */
@@ -628,7 +828,10 @@
     var r = parse(), a = r.parts[0] || "";
     var y = window.scrollY;
     var html;
+    var sub = a === "pods" ? r.parts[1] : null;
     if (a === "") html = viewHome();
+    else if (sub === "new") html = viewPodForm(null, r.q);
+    else if (sub === "edit") html = viewPodForm(r.parts[2], r.q);
     else if (a === "pods") html = viewPods(r.q);
     else if (a === "pod") html = viewPod(r.parts[1]);
     else if (a === "drinks") html = viewDrinks(r.q);
@@ -638,9 +841,10 @@
     else html = notFound();
     view.innerHTML = html;
 
-    var isTab = ["", "pods", "drinks", "favorites"].indexOf(a) !== -1;
+    var isTab = ["", "pods", "drinks", "favorites"].indexOf(a) !== -1 && !sub;
+    var barTitle = sub === "new" ? "New pod" : sub === "edit" ? "Edit pod" : TITLES[a];
     topbar.innerHTML = (isTab ? '<span class="brand">' + podDot({ color: "#A0612E" }, 22) + 'The Daily Brew</span>'
-      : '<button class="back" data-act="back" aria-label="Back">' + ICONS.back + '<span>Back</span></button><span class="topbar-title">' + TITLES[a] + '</span>');
+      : '<button class="back" data-act="back" aria-label="Back">' + ICONS.back + '<span>Back</span></button><span class="topbar-title">' + barTitle + '</span>');
     document.title = (a === "" ? "" : (TITLES[a] || "") + " · ") + "The Daily Brew";
     var tab = { "": "home", pods: "pods", pod: "pods", drinks: "drinks", drink: "drinks", make: "drinks", favorites: "favorites" }[a];
     document.querySelectorAll(".tabbar a").forEach(function (el) {
@@ -656,6 +860,7 @@
       search.addEventListener("input", function () { runSearch(search.value); });
       search.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); search.blur(); } });
     }
+    bindPodForm();
     var sel = document.getElementById("pod-select");
     if (sel) sel.addEventListener("change", function () { updateMake({ pod: sel.value }); });
   }
@@ -695,8 +900,9 @@
     if (t.dataset.set) { var ch = {}; ch[t.dataset.set] = t.dataset.val; updateMake(ch); return; }
     var act = t.dataset.act;
     if (act === "back") {
+      var pr = parse().parts;
       if (navStack.length > 1) history.back();
-      else location.hash = PARENT[parse().parts[0]] || "#/";
+      else location.hash = (pr[0] === "pods" && pr[1]) ? "#/pods" : (PARENT[pr[0]] || "#/");
     } else if (act === "fav") {
       var r = parse(), recipe = recipeById(r.parts[1]);
       toggleFav(normalize(recipe, { pod: r.q.get("pod"), temp: r.q.get("temp"), sweet: r.q.get("sweet"), milk: r.q.get("milk") }));
@@ -711,6 +917,19 @@
       toggleOwn(t.dataset.pod);
       var input = view.querySelector("input[data-search]");
       if (document.getElementById("results") && input) runSearch(input.value); else render(true);
+    } else if (act === "delete-pod") {
+      var dp = podById(t.dataset.pod);
+      if (!dp || !dp.custom) return;
+      var usedBy = favs().filter(function (f) { return f.pod === dp.id; }).length;
+      confirmSheet("Delete “" + dp.name + "”?",
+        "It will be removed from your pods and My Pods. This can’t be undone." +
+        (usedBy ? " " + usedBy + " favorite" + (usedBy === 1 ? " uses" : "s use") + " it; " + (usedBy === 1 ? "it" : "they") + " will switch to “Any " + window.SIZES[dp.size].label + " pod”." : ""),
+        "Delete pod", function () {
+          deleteCustom(dp.id);
+          toast("Deleted " + dp.name);
+          navStack = ["#/pods"];
+          location.replace("#/pods");
+        });
     } else if (act === "clear-search") {
       var box = view.querySelector("input[data-search]");
       if (box) { box.value = ""; runSearch(""); box.focus(); }
@@ -726,6 +945,7 @@
     render(false);
   });
 
+  refreshPods();
   render(false);
 
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
@@ -734,5 +954,6 @@
 
   // Exposed for testing in the browser console.
   window.DailyBrew = { compute: compute, classify: classify, normalize: normalize, fmtSpoons: fmtSpoons, fmtOz: fmtOz,
-                       matchesAll: matchesAll, podText: podText, drinkText: drinkText, myPods: myPods, bestOwnedFor: bestOwnedFor, bestPodFor: bestPodFor };
+                       matchesAll: matchesAll, podText: podText, drinkText: drinkText, myPods: myPods, bestOwnedFor: bestOwnedFor, bestPodFor: bestPodFor,
+                       toPod: toPod, nameTaken: nameTaken, refreshPods: refreshPods, podById: podById };
 })();

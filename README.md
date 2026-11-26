@@ -8,6 +8,39 @@ hot/iced, sweetness or milk. Favorites and your pod collection are saved on your
 - No AI, no API keys, no accounts, no outside services.
 - Installable on iPhone (Add to Home Screen) and works offline after the first visit.
 
+## What's new in version 3: custom pods
+
+For new seasonal or limited-edition pods that aren't in the built-in list.
+
+- **Adding a pod:** tap **＋ Add a Pod** on the Pods screen. It's also in "Pod not listed?",
+  and a search with no results offers "Add '…' as a custom pod".
+- **The form:**
+  - **Name** (required, up to 40 characters).
+  - **Size** (required): Espresso, Double Espresso, Gran Lungo, Coffee or XL.
+  - **Flavor notes** (pick any).
+  - **Optional switches:** "Flavored coffee", "Made for ice", and "Add to My Pods" (on by default).
+  - **Live preview:** shows which drinks the pod would be recommended for.
+- **Duplicate names are blocked:** capitals, accents and extra spaces are ignored, and the check covers built-in and custom pods.
+- **Same rules as built-in pods:** custom pods use the same recommendation rules. Flavor
+  notes become the same flavor tags the built-in pods use:
+
+  | You pick | Counts as |
+  |---|---|
+  | Vanilla, Caramel, Chocolate, Maple, Nutty, Spice, Pumpkin, Cinnamon, Brown sugar, Peppermint, White chocolate, Gingerbread | that flavor |
+  | Mild | milk-friendly (like Arondio) |
+  | Bold | classic + chocolate (like Fortado and Scuro) |
+  | Fruity | shown on the pod, but no recipe uses it, so it adds no points |
+
+  "Flavored coffee" turns on the same rule as Maple Pecan and other flavored pods: a flavored
+  pod is never recommended for a drink whose flavors don't match. "Made for ice" works like
+  Ice Leggero (a bonus point for iced-only drinks).
+- **Where custom pods appear:** everywhere built-in pods do (pod lists, search, My Pods,
+  drink pages, the recipe's pod picker, favorites), marked **Custom**.
+- **Edit or delete** from the pod's page:
+  - **Deleting** asks first. It also removes the pod from My Pods.
+  - Favorites that used the pod switch to the generic pod of the same size (e.g. "Any Coffee pod"), so the recipe still works.
+- **Storage:** custom pods are saved only on this device (browser storage key `dailybrew.custompods.v1`).
+
 ## What's new in version 2
 
 - **My Pods:** tap ＋ next to a pod (or "Add to My Pods" on its page) to mark the pods you own.
@@ -105,7 +138,7 @@ All paths in the app are relative, so it works in that sub-folder without change
 3. Scroll down and tap **Add to Home Screen**, then **Add**.
 4. Open The Daily Brew from your home screen once while online. After that it works offline.
 
-Favorites and My Pods live on the phone in that app's storage. They don't sync to other
+Favorites, My Pods and custom pods live on the phone in that app's storage. They don't sync to other
 devices, and deleting the app from your home screen erases them. The Home Screen app and
 Safari keep separate storage, so pods added in one won't appear in the other.
 
@@ -113,11 +146,11 @@ Safari keep separate storage, so pods added in one won't appear in the other.
 
 The app saves its files for offline use, so phones keep the old version until you
 tell them there's a new one. **Whenever you change any file, open `sw.js` and change
-`VERSION`**. It's currently `daily-brew-v2`; use `daily-brew-v3` next time.
+`VERSION`**. It's currently `daily-brew-v3`; use `daily-brew-v4` next time.
 
 On the iPhone, the first launch after you republish still shows the old version while
 the new one downloads in the background. Fully close the app (swipe it away) and open it
-again to get the new version. Your favorites and pods are kept.
+again to get the new version. Your favorites, My Pods and custom pods are kept.
 
 ## Where the pod data comes from
 

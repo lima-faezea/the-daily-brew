@@ -1,6 +1,6 @@
 /* The Daily Brew: service worker for offline use.
    When you change any file, bump VERSION so phones download the update. */
-var VERSION = "daily-brew-v2";
+var VERSION = "daily-brew-v3";
 var FILES = [
   "./",
   "./index.html",
