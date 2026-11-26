@@ -1,1 +1,112 @@
-# the-daily-brew
+# The Daily Brew
+
+A phone-friendly recipe app for the Nespresso Vertuo (built around the Vertuo Pop+).
+Pick the pod you have and see drinks that suit it, or pick a drink and see which pods
+make it best. Each recipe scales to the pod's brew size and updates when you change
+hot/iced, sweetness or milk. Favorites are saved on your phone.
+
+- No AI, no API keys, no accounts, no outside services.
+- Installable on iPhone (Add to Home Screen) and works offline after the first visit.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `index.html` | The main page |
+| `styles.css` | Look and feel (cream, espresso, caramel, sage; automatic dark mode) |
+| `app.js` | Screens, recommendation rules, recipe math, favorites |
+| `data/pods.js` | The pod list: names, sizes, tasting notes, flavor pairings |
+| `data/recipes.js` | The 12 recipes and the fixed rules for scaling them |
+| `manifest.webmanifest` | Lets the app install to a home screen |
+| `sw.js` | Service worker: saves the app for offline use |
+| `icons/` | App icons (`icon.svg` is the editable source) |
+
+## How the rules work (all fixed and checkable)
+
+**Recipe amounts** (see the top of `data/recipes.js`):
+1. Each drink style (latte, shaken espresso, iced coffee) has a table of how much milk
+   or water goes with each pod size.
+2. Drink size = pod volume + milk + water.
+3. Scale = drink size ÷ the size of the Double Espresso version, rounded to the nearest ¼.
+4. Sweet ingredients × scale × sweetness (None 0, Light ½, Regular 1, Extra 1½).
+   Flavor ingredients (spices, extracts) × scale. Toppings never change.
+5. Amounts round to measurable sizes: ½ tsp, ½ tbsp, ⅛/¼/½ tsp for spices, ½ fl oz for milk.
+   Metric uses 1 tsp = 5 ml, 1 tbsp = 15 ml, 1 fl oz = 29.57 ml.
+
+**Milk choice** changes the ingredient, the frothing steps (almond milk is heated
+more gently and added after the coffee rests), the tips, and the pumpkin cold foam
+(coconut cream replaces heavy cream for oat/almond). It does not change the
+milk amount. The same volume of any milk is the right amount.
+
+**Iced drinks** brew into a separate cup, then cool before they meet the ice:
+2 melted ice cubes for espresso-size pods, or a 5-minute rest for bigger pods.
+This keeps the drink from getting watery. Brown Sugar Shaken Espresso, Iced White
+Chocolate Mocha and Pumpkin Cream Iced Coffee are iced-only, with no hot option.
+
+**Recommendations** (`classify` in `app.js`):
+- Size fit: each style rates each pod size 0–3 (Double Espresso is ideal for lattes,
+  mug-size and XL pods for iced coffee).
+- Flavor points: the drink's main flavor matching the pod = 2, any other shared flavor = 1,
+  and a pod Nespresso designs for ice with an iced-only drink = 1.
+- **Recommended**: size fit ≥ 1 and flavor points ≥ 2.
+- **Works well**: no flavor clash, and either a good size fit or at least one shared flavor.
+- **Other**: everything else. Still allowed, with a note on what to expect. A flavored pod
+  with no shared flavor (e.g. Peppermint Pinwheel in a pumpkin drink) is never recommended.
+
+## Try it on your computer
+
+The offline feature only runs from a web address, not by double-clicking the file.
+In Terminal:
+
+```bash
+cd ~/Documents/the-daily-brew
+```
+
+```bash
+python3 -m http.server 8765
+```
+
+Then open http://localhost:8765 in your browser. Press Ctrl+C in Terminal to stop.
+
+## Publish on GitHub Pages
+
+1. Create a repository named `the-daily-brew` and upload everything in this folder.
+2. In the repo: **Settings → Pages → Build and deployment → Deploy from a branch**,
+   choose `main` and `/ (root)`, then Save.
+3. After a minute it's live at `https://YOUR-USERNAME.github.io/the-daily-brew/`.
+
+All paths in the app are relative, so it works in that sub-folder without changes.
+
+## Install on your iPhone
+
+1. Open the GitHub Pages address in **Safari** (it must be Safari).
+2. Tap the **Share** button (square with an arrow).
+3. Scroll down and tap **Add to Home Screen**, then **Add**.
+4. Open The Daily Brew from your home screen once while online. After that it works offline.
+
+Favorites live on the phone in that app's storage. They don't sync to other devices,
+and deleting the app from your home screen erases them.
+
+## Updating the app later
+
+The app saves its files for offline use, so phones keep the old version until you
+tell them there's a new one. **Whenever you change any file, open `sw.js` and change
+`VERSION`** (e.g. `daily-brew-v1` → `daily-brew-v2`). On the iPhone, close and reopen
+the app (sometimes twice) to pick up the update.
+
+## Where the pod data comes from
+
+Pod names, cup sizes, tasting notes and intensities were checked against Nespresso
+USA's Vertuo pod page (nespresso.com/us/en/vertuo-coffee-pods) on **Nov 25, 2026**.
+Limited editions (Gingerbread, Peppermint Pinwheel, Pumpkin Spice Cake, Cinnamon
+Apple Crisp) come and go, so check them against your sleeves.
+
+Things to know:
+- **Ice Forte** is a 7.77 fl oz Coffee-size pod; **Ice Leggero** and **Active** are 2.7 fl oz Double Espresso pods.
+- Nespresso lists XL pods as 12–14 fl oz; the app plans XL recipes for 12 fl oz.
+- Nespresso's US site says the Vertuo Pop+ brews "5 sizes" and lists Pop machines as
+  XL-compatible, but doesn't name the five. The app includes Espresso, Double Espresso,
+  Gran Lungo, Coffee and XL. If your machine won't brew an XL pod, skip those.
+- Nespresso doesn't publish an intensity for Bianco Doppio, Ice Leggero or the flavored pods.
+- The flavor pairings (`pairs` in `data/pods.js`) are the app's own judgment based on
+  Nespresso's tasting notes. Nespresso doesn't publish them.
